@@ -242,7 +242,7 @@ launchctl list | grep claude.terminal-remote
 
 This project exists thanks to:
 
-- **[Andrew Ford](https://andrewford.co.nz)** - His blog post [Claude Code instant notifications with ntfy](https://andrewford.co.nz/articles/claude-code-instant-notifications-ntfy/) introduced me to using ntfy with Claude Code. This project extends his idea with action buttons and multi-session TTY routing.
+- **[Andrew Ford](https://github.com/andrewjamesford)** - His blog post [Claude Code instant notifications with ntfy](https://andrewford.co.nz/articles/claude-code-instant-notifications-ntfy/) introduced me to using ntfy with Claude Code. This project extends his idea with action buttons and multi-session TTY routing.
 
 - **[ntfy](https://ntfy.sh)** by [Philipp C. Heckel](https://github.com/binwiederhier) - The simple, brilliant HTTP-based pub-sub notification service that makes this all possible.
 
