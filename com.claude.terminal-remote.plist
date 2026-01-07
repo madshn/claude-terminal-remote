@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude.terminal-remote</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <!-- IMPORTANT: Replace YOUR_USERNAME with your actual username -->
+        <string>. /Users/YOUR_USERNAME/.claude-terminal-remote.env &amp;&amp; /Users/YOUR_USERNAME/.claude/poller.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/claude-terminal-remote.out</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/claude-terminal-remote.err</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <!-- IMPORTANT: Replace YOUR_USERNAME with your actual username -->
+        <key>HOME</key>
+        <string>/Users/YOUR_USERNAME</string>
+    </dict>
+</dict>
+</plist>
