@@ -4,6 +4,15 @@ When you have multiple long-running Claude Code sessions on your Mac, they event
 
 <img src="claude-terminal-remote.png" alt="Claude Terminal Remote in action" width="400">
 
+### Input Dialogs
+
+When Claude asks questions with multiple options, you get labeled buttons on your phone:
+
+<p>
+<img src="claude-asks.png" alt="Claude asking for input in terminal" width="400">
+<img src="ntfy-provides-options.jpg" alt="ntfy showing labeled options" width="200">
+</p>
+
 **An add-on for [ntfy](https://ntfy.sh)** - the simple HTTP-based pub-sub notification service by [Philipp C. Heckel](https://github.com/binwiederhier).
 
 > **Note:** This is a quick-hack utility project. It works well for my workflow but isn't polished production software. Use it as a starting point and adapt to your needs.
@@ -88,6 +97,10 @@ CLAUDE_TERMINAL_WEBHOOK_URL="https://your-n8n.com/webhook/claude-terminal-remote
 
 # Unique topic suffix - generate with: openssl rand -hex 4
 CLAUDE_TERMINAL_TOPIC_SUFFIX="your-unique-suffix"
+
+# Notification delay in seconds (default: 60)
+# Prevents spam when actively working - only notifies if you've stepped away
+CLAUDE_TERMINAL_NOTIFY_DELAY="60"
 ```
 
 ### 3. Import n8n Workflow
@@ -175,6 +188,13 @@ For example, if working on a project called "myapp" with suffix "abc123":
 | Continue | `y` |
 | Skip | `skip` |
 
+**Input dialogs** (dynamic buttons):
+| Button | Action |
+|--------|--------|
+| Option labels from Claude | `1`, `2`, `3` |
+
+Input dialogs show the actual option text as button labels. Options containing "Type" or "Other" (free-text input) are filtered out since they require manual response.
+
 ## Topic Naming Convention
 
 Topics are dynamically generated based on project directory:
@@ -199,7 +219,10 @@ claude-terminal-remote/
 ├── ntfy-notify-hook.sh               # Claude Code notification hook
 ├── n8n-workflow.json                 # n8n workflow for import
 ├── com.claude.terminal-remote.plist  # launchd service config
-└── accessibility-setup.png           # Screenshot of required permissions
+├── claude-terminal-remote.png        # Hero image
+├── accessibility-setup.png           # Screenshot of required permissions
+├── claude-asks.png                   # Terminal showing input dialog
+└── ntfy-provides-options.jpg         # ntfy app showing labeled buttons
 ```
 
 ## Commands
