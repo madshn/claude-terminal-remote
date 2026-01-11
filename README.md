@@ -2,6 +2,8 @@
 
 When you have multiple long-running Claude Code sessions on your Mac, they eventually stop and ask for permission to proceed. This utility allows you to approve them from your mobile phone using the [ntfy](https://ntfy.sh) app.
 
+Alternative projects (probably less hacky): https://teleportation.dev/
+
 <img src="claude-terminal-remote.png" alt="Claude Terminal Remote in action" width="400">
 
 ### Input Dialogs
