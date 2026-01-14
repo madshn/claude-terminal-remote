@@ -1,7 +1,7 @@
 #!/bin/bash
 # Claude Terminal Remote - Poller
 # Polls Supabase for continue signals from ntfy -> n8n
-# Sends keystrokes to the correct Terminal tab via AppleScript (matched by TTY)
+# Sends keystrokes to the correct terminal (Terminal.app or VSCode) via AppleScript
 #
 # Part of claude-terminal-remote
 # An add-on for ntfy (https://ntfy.sh) by Philipp C. Heckel
@@ -28,7 +28,138 @@ log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG_FILE"
 }
 
-log "Poller started (with TTY routing)"
+# Detect which app owns a TTY (Terminal or VSCode)
+# Returns: "Terminal", "VSCode", or "unknown"
+detect_tty_owner() {
+  local tty_name="$1"
+
+  # Get the processes using this TTY - use while read for proper line handling
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+
+    # Check the process and its ancestors for VSCode
+    local proc_info=$(ps -o command= -p "$pid" 2>/dev/null)
+    if [[ "$proc_info" == *"Visual Studio Code"* ]] || [[ "$proc_info" == *"Code.app"* ]] || [[ "$proc_info" == *"/Electron"* ]]; then
+      echo "VSCode"
+      return
+    fi
+
+    # Check parent processes
+    local ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    while [[ -n "$ppid" && "$ppid" != "1" && "$ppid" != "0" ]]; do
+      proc_info=$(ps -o command= -p "$ppid" 2>/dev/null)
+      if [[ "$proc_info" == *"Visual Studio Code"* ]] || [[ "$proc_info" == *"Code.app"* ]] || [[ "$proc_info" == *"/Electron"* ]]; then
+        echo "VSCode"
+        return
+      fi
+      ppid=$(ps -o ppid= -p "$ppid" 2>/dev/null | tr -d ' ')
+    done
+  done < <(lsof -t "/dev/${tty_name}" 2>/dev/null | head -5)
+
+  # Default to Terminal if not VSCode
+  echo "Terminal"
+}
+
+# Send keystroke to VSCode
+send_to_vscode() {
+  local action="$1"
+  local is_escape="$2"
+
+  if [[ "$is_escape" == "true" ]]; then
+    osascript <<EOF 2>/dev/null
+      tell application "Code" to activate
+      delay 0.3
+      tell application "System Events" to tell process "Code"
+        key code 53
+      end tell
+EOF
+  else
+    osascript <<EOF 2>/dev/null
+      tell application "Code" to activate
+      delay 0.3
+      tell application "System Events" to tell process "Code"
+        keystroke "${action}"
+        keystroke return
+      end tell
+EOF
+  fi
+}
+
+# Send keystroke to Terminal.app (with TTY matching)
+send_to_terminal() {
+  local action="$1"
+  local tty_path="$2"
+  local is_escape="$3"
+
+  if [[ "$is_escape" == "true" ]]; then
+    osascript <<EOF 2>/dev/null
+      tell application "Terminal"
+        set targetTab to missing value
+        set targetWindow to missing value
+
+        -- Find tab by TTY
+        repeat with w in windows
+          repeat with t in tabs of w
+            if tty of t is "${tty_path}" then
+              set targetTab to t
+              set targetWindow to w
+              exit repeat
+            end if
+          end repeat
+          if targetTab is not missing value then exit repeat
+        end repeat
+
+        if targetTab is not missing value then
+          -- Bring window to front and select the tab
+          activate
+          set index of targetWindow to 1
+          set selected tab of targetWindow to targetTab
+          delay 0.3
+
+          -- Send Escape key
+          tell application "System Events" to tell process "Terminal"
+            key code 53
+          end tell
+        end if
+      end tell
+EOF
+  else
+    osascript <<EOF 2>/dev/null
+      tell application "Terminal"
+        set targetTab to missing value
+        set targetWindow to missing value
+
+        -- Find tab by TTY
+        repeat with w in windows
+          repeat with t in tabs of w
+            if tty of t is "${tty_path}" then
+              set targetTab to t
+              set targetWindow to w
+              exit repeat
+            end if
+          end repeat
+          if targetTab is not missing value then exit repeat
+        end repeat
+
+        if targetTab is not missing value then
+          -- Bring window to front and select the tab
+          activate
+          set index of targetWindow to 1
+          set selected tab of targetWindow to targetTab
+          delay 0.3
+
+          -- Send keystroke
+          tell application "System Events" to tell process "Terminal"
+            keystroke "${action}"
+            keystroke return
+          end tell
+        end if
+      end tell
+EOF
+  fi
+}
+
+log "Poller started (with TTY routing, Terminal + VSCode support)"
 
 while true; do
   response=$(curl -s --max-time 10 \
@@ -42,78 +173,24 @@ while true; do
     tty=$(echo "$response" | jq -r '.[0].tty // ""' 2>/dev/null)
 
     if [[ "$id" != "null" && "$id" != "" ]]; then
-      log "Received: action='$action' tty='$tty'"
+      # Detect which app owns this TTY
+      tty_owner=$(detect_tty_owner "$tty")
+      log "Received: action='$action' tty='$tty' owner='$tty_owner'"
 
-      # Build the TTY path for matching (e.g., "ttys001" -> "/dev/ttys001")
+      # Build the TTY path for Terminal.app matching
       tty_path="/dev/${tty}"
 
-      # Handle special actions (Escape for decline)
-      if [[ "$action" == "n" || "$action" == "esc" ]]; then
-        osascript <<EOF 2>/dev/null
-          tell application "Terminal"
-            set targetTab to missing value
-            set targetWindow to missing value
+      # Determine if this is an escape action
+      is_escape="false"
+      [[ "$action" == "n" || "$action" == "esc" ]] && is_escape="true"
 
-            -- Find tab by TTY
-            repeat with w in windows
-              repeat with t in tabs of w
-                if tty of t is "${tty_path}" then
-                  set targetTab to t
-                  set targetWindow to w
-                  exit repeat
-                end if
-              end repeat
-              if targetTab is not missing value then exit repeat
-            end repeat
-
-            if targetTab is not missing value then
-              -- Bring window to front and select the tab
-              activate
-              set index of targetWindow to 1
-              set selected tab of targetWindow to targetTab
-              delay 0.3
-
-              -- Send Escape key
-              tell application "System Events" to tell process "Terminal"
-                key code 53
-              end tell
-            end if
-          end tell
-EOF
+      # Send to appropriate app
+      if [[ "$tty_owner" == "VSCode" ]]; then
+        send_to_vscode "$action" "$is_escape"
+        log "Sent '$action' to VSCode (tty: $tty)"
       else
-        # Send keystroke + return for other actions (1, 2, y, etc)
-        osascript <<EOF 2>/dev/null
-          tell application "Terminal"
-            set targetTab to missing value
-            set targetWindow to missing value
-
-            -- Find tab by TTY
-            repeat with w in windows
-              repeat with t in tabs of w
-                if tty of t is "${tty_path}" then
-                  set targetTab to t
-                  set targetWindow to w
-                  exit repeat
-                end if
-              end repeat
-              if targetTab is not missing value then exit repeat
-            end repeat
-
-            if targetTab is not missing value then
-              -- Bring window to front and select the tab
-              activate
-              set index of targetWindow to 1
-              set selected tab of targetWindow to targetTab
-              delay 0.3
-
-              -- Send keystroke
-              tell application "System Events" to tell process "Terminal"
-                keystroke "${action}"
-                keystroke return
-              end tell
-            end if
-          end tell
-EOF
+        send_to_terminal "$action" "$tty_path" "$is_escape"
+        log "Sent '$action' to Terminal (tty: $tty)"
       fi
 
       # Delete the processed signal
@@ -122,8 +199,6 @@ EOF
         -H "apikey: ${SUPABASE_KEY}" \
         -H "Authorization: Bearer ${SUPABASE_KEY}" \
         > /dev/null
-
-      log "Sent '$action' to Terminal (tty: $tty)"
     fi
   fi
 

@@ -97,8 +97,8 @@ CLAUDE_TERMINAL_SUPABASE_KEY="your-anon-key"
 # Your n8n webhook URL (after importing workflow)
 CLAUDE_TERMINAL_WEBHOOK_URL="https://your-n8n.com/webhook/claude-terminal-remote"
 
-# Unique topic suffix - generate with: openssl rand -hex 4
-CLAUDE_TERMINAL_TOPIC_SUFFIX="your-unique-suffix"
+# Unique private key for topic names - generate with: openssl rand -hex 4
+CLAUDE_TERMINAL_PRIVATE_KEY="your-private-key"
 
 # Notification delay in seconds (default: 60)
 # Prevents spam when actively working - only notifies if you've stepped away
@@ -169,11 +169,11 @@ Terminal.app needs accessibility permissions to receive keystrokes:
 In the ntfy app, subscribe to your project topics:
 
 ```
-{project-name}-claude-{your-topic-suffix}
+{project-name}-ctr-{your-private-key}
 ```
 
-For example, if working on a project called "myapp" with suffix "abc123":
-- Subscribe to: `myapp-claude-abc123`
+For example, if working on a project called "myapp" with private key "abc1923k":
+- Subscribe to: `myapp-ctr-abc1923k`
 
 ## Action Buttons
 
@@ -202,13 +202,15 @@ Input dialogs show the actual option text as button labels. Options containing "
 Topics are dynamically generated based on project directory:
 
 ```
-{project}-claude-{suffix}
+{project}-ctr-{privateKey}
 ```
 
+Where `ctr` = Claude Terminal Remote.
+
 Examples:
-- `/Users/you/dev/myproject` → `myproject-claude-abc123`
-- `/Users/you/work/webapp` → `webapp-claude-abc123`
-- Worktrees resolve to parent: `/Users/you/dev/myproject/.trees/feature-x` → `myproject-claude-abc123`
+- `/Users/you/dev/myproject` → `myproject-ctr-abc1923k`
+- `/Users/you/work/webapp` → `webapp-ctr-abc1923k`
+- Worktrees resolve to parent: `/Users/you/dev/myproject/.trees/feature-x` → `myproject-ctr-abc1923k`
 
 ## Files
 
@@ -260,7 +262,7 @@ launchctl list | grep claude.terminal-remote
 
 **ntfy not showing buttons:**
 1. Ensure you're subscribed to the correct topic
-2. Check your topic suffix matches your env file
+2. Check your private key matches your env file
 3. Verify WEBHOOK_URL is set in your env file
 
 ## Credits
@@ -269,7 +271,7 @@ This project exists thanks to:
 
 - **[Andrew Ford](https://github.com/andrewjamesford)** - His blog post [Claude Code instant notifications with ntfy](https://andrewford.co.nz/articles/claude-code-instant-notifications-ntfy/) introduced me to using ntfy with Claude Code. This project extends his idea with action buttons and multi-session TTY routing.
 
-- **[ntfy](https://ntfy.sh)** by [Philipp C. Heckel](https://github.com/binwiederhier) - The simple, brilliant HTTP-based pub-sub notification service that makes this all possible.
+- **[ntfy](https://ntfy.sh)** ([GitHub](https://github.com/binwiederhier/ntfy)) by [Philipp C. Heckel](https://github.com/binwiederhier) - The simple, brilliant HTTP-based pub-sub notification service that makes this all possible.
 
 - **[Claude](https://claude.ai)** by [Anthropic](https://anthropic.com) - This entire implementation was built collaboratively with Claude Code. Meta, I know.
 

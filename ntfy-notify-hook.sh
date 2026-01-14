@@ -17,15 +17,15 @@ if [ -f "$HOME/.claude-terminal-remote.env" ]; then
   source "$HOME/.claude-terminal-remote.env"
 fi
 
-TOPIC_SUFFIX="${CLAUDE_TERMINAL_TOPIC_SUFFIX:-}"
+NTFY_SECRET="${CLAUDE_TERMINAL_SECRET:-}"
 WEBHOOK_URL="${CLAUDE_TERMINAL_WEBHOOK_URL:-}"
 NOTIFY_DELAY="${CLAUDE_TERMINAL_NOTIFY_DELAY:-60}"  # Default 60 seconds
 
-# Generate a random topic suffix if not set (first run)
-if [ -z "$TOPIC_SUFFIX" ]; then
-  TOPIC_SUFFIX=$(openssl rand -hex 4)
-  echo "Warning: CLAUDE_TERMINAL_TOPIC_SUFFIX not set. Using random: $TOPIC_SUFFIX" >&2
-  echo "Add to ~/.claude-terminal-remote.env: CLAUDE_TERMINAL_TOPIC_SUFFIX=$TOPIC_SUFFIX" >&2
+# Generate a random secret if not set (first run)
+if [ -z "$NTFY_SECRET" ]; then
+  NTFY_SECRET=$(openssl rand -hex 4)
+  echo "Warning: CLAUDE_TERMINAL_SECRET not set. Using random: $NTFY_SECRET" >&2
+  echo "Add to ~/.claude-terminal-remote.env: CLAUDE_TERMINAL_SECRET=$NTFY_SECRET" >&2
 fi
 
 # Read JSON input from Claude Code
@@ -61,13 +61,59 @@ if [[ "$message" == "Claude Code needs your attention" ]]; then
   is_input_dialog=true
 fi
 
-# For real permission prompts, extract tool description from transcript
-tool_description=""
+# For real permission prompts, extract tool context from transcript
+tool_context=""
 if [[ "$notification_type" == "permission_prompt" && "$is_input_dialog" == "false" && -f "$transcript_path" ]]; then
-  # Get the last tool_use entry's description from the transcript
-  tool_description=$(tail -20 "$transcript_path" 2>/dev/null | \
-    jq -r 'select(.message.content) | .message.content[] | select(.type == "tool_use") | .input.description // empty' 2>/dev/null | \
+  # Get the last tool_use entry from the transcript
+  tool_json=$(tail -50 "$transcript_path" 2>/dev/null | \
+    jq -c 'select(.message.content) | .message.content[] | select(.type == "tool_use")' 2>/dev/null | \
     tail -1)
+
+  if [[ -n "$tool_json" ]]; then
+    tool_name=$(echo "$tool_json" | jq -r '.name // empty')
+
+    # Build context based on tool type
+    case "$tool_name" in
+      "Bash")
+        cmd=$(echo "$tool_json" | jq -r '.input.command // empty' | head -c 100)
+        desc=$(echo "$tool_json" | jq -r '.input.description // empty' | head -c 80)
+        if [[ -n "$desc" ]]; then
+          tool_context="Run: ${desc}"
+        elif [[ -n "$cmd" ]]; then
+          tool_context="Run: ${cmd}"
+        fi
+        ;;
+      "Edit")
+        file=$(echo "$tool_json" | jq -r '.input.file_path // empty' | xargs basename 2>/dev/null)
+        tool_context="Edit: ${file}"
+        ;;
+      "Write")
+        file=$(echo "$tool_json" | jq -r '.input.file_path // empty' | xargs basename 2>/dev/null)
+        tool_context="Write: ${file}"
+        ;;
+      "Read")
+        file=$(echo "$tool_json" | jq -r '.input.file_path // empty' | xargs basename 2>/dev/null)
+        tool_context="Read: ${file}"
+        ;;
+      "Task")
+        desc=$(echo "$tool_json" | jq -r '.input.description // empty' | head -c 80)
+        tool_context="Task: ${desc}"
+        ;;
+      "WebFetch"|"WebSearch")
+        url=$(echo "$tool_json" | jq -r '.input.url // .input.query // empty' | head -c 60)
+        tool_context="${tool_name}: ${url}"
+        ;;
+      *)
+        # Fallback: use description if available, otherwise tool name
+        desc=$(echo "$tool_json" | jq -r '.input.description // empty' | head -c 80)
+        if [[ -n "$desc" ]]; then
+          tool_context="${tool_name}: ${desc}"
+        else
+          tool_context="${tool_name}"
+        fi
+        ;;
+    esac
+  fi
 fi
 
 # For input dialogs, try to extract question and options from transcript
@@ -110,8 +156,8 @@ if [[ "$cwd" == *"/.trees/"* ]]; then
   project=$(basename "$main_repo" 2>/dev/null || echo "claude")
 fi
 
-# Build topic: {project}-claude-{suffix}
-NTFY_TOPIC="${project}-claude-${TOPIC_SUFFIX}"
+# Build topic: single topic for all projects
+NTFY_TOPIC="clauderemote-${NTFY_SECRET}"
 NTFY_URL="https://ntfy.sh/${NTFY_TOPIC}"
 
 # Determine title, priority, and action buttons based on notification type
@@ -173,21 +219,39 @@ else
   esac
 fi
 
-# Build message body with project context
+# Build message body with project context and clear description
 if [[ -n "$input_question" ]]; then
   # Input dialog - show the question
-  body="${input_question} [${project}]"
-elif [[ -n "$tool_description" ]]; then
-  # Permission prompt - show tool description
-  body="${tool_description} [${project}]"
+  body="${input_question}"
+elif [[ -n "$tool_context" ]]; then
+  # Permission prompt - show what tool wants to do
+  body="${tool_context}"
+elif [[ "$notification_type" == "permission_prompt" ]]; then
+  # Permission prompt without context - shouldn't happen often
+  body="Tool permission needed"
+elif [[ "$notification_type" == "idle_prompt" ]]; then
+  # Idle prompt - explain what's happening
+  body="Finished - waiting for instructions"
 else
-  body="${message} [${project}]"
+  # Generic fallback
+  body="${message}"
 fi
+
+# Prefix with project name for context
+body="[${project}] ${body}"
 
 # Send notification after delay (in background so hook returns immediately)
 (
   if [ "$NOTIFY_DELAY" -gt 0 ] 2>/dev/null; then
     sleep "$NOTIFY_DELAY"
+  fi
+
+  # Check if user is active in a terminal app - skip notification if so
+  # This avoids spamming notifications when user is actively working
+  frontmost=$(osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null)
+  if [[ "$frontmost" == "Terminal" || "$frontmost" == "Code" ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') Skipping notification - ${frontmost} is frontmost" >> /tmp/claude-hook-debug.log
+    exit 0
   fi
 
   if [ -n "$actions" ]; then
