@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/madsnissen/ops/claude-terminal-remote/.codex/hooks/repotic-session-start.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": null,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/madsnissen/ops/claude-terminal-remote/.codex/hooks/repotic-session-stop.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
